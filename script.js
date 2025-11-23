@@ -1,4 +1,4 @@
-/* ------------------------------- WIP
+/* -------------------------------
         CONFIGURAZIONE
 --------------------------------*/
 
@@ -208,3 +208,4 @@ function resetRecordingState(){
     resetCanvas();
 }
 window.addEventListener('beforeunload', resetRecordingState);
+
