@@ -67,22 +67,29 @@ function startTimer(){
     },1000);
 }
 
-function stopTimer(){ clearInterval(timerInterval); }
+function stopTimer(){
+    clearInterval(timerInterval);
+}
 
 function resetRecordingState(){
     if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
     if(stream) stream.getTracks().forEach(t => t.stop());
+
     audioChunks = [];
     audioBlob = null;
     uploadedURL = "";
     canSend = false;
+
     player.src = "";
     player.style.display = 'none';
+
     startBtn.disabled = false;
     stopBtn.disabled = true;
     sendBtn.disabled = true;
+
     startBtn.textContent = '🎙️ Registra';
     timerEl.textContent = '00:00';
+
     resetCanvas();
 }
 
@@ -102,7 +109,16 @@ startBtn.addEventListener('click', async () => {
         return;
     }
 
-    mediaRecorder = new MediaRecorder(stream);
+    // FORZATO per compatibilità iOS (AAC/MP4)
+    try {
+        mediaRecorder = new MediaRecorder(stream, {
+            mimeType: 'audio/mp4; codecs=mp4a.40.2'
+        });
+    } catch (e) {
+        // fallback se il browser non accetta il mimeType
+        mediaRecorder = new MediaRecorder(stream);
+    }
+
     audioChunks = [];
 
     mediaRecorder.ondataavailable = e => {
@@ -120,16 +136,20 @@ startBtn.addEventListener('click', async () => {
 
     mediaRecorder.onstop = async () => {
         stopTimer();
-        audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+
+        // iOS COMPATIBILE: mp4/AAC invece del webm
+        audioBlob = new Blob(audioChunks, { type: "audio/mp4" });
+
         const url = URL.createObjectURL(audioBlob);
         player.src = url;
         player.load();
         player.style.display = 'block';
+
         statusEl.textContent = '⏳ Upload sul Cloud...';
 
         try{
             const formData = new FormData();
-            formData.append('file', audioBlob, 'messaggio.webm');
+            formData.append('file', audioBlob, 'messaggio.mp4');
             formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
             const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, {
@@ -138,13 +158,17 @@ startBtn.addEventListener('click', async () => {
             });
 
             if(!resp.ok) throw new Error('Upload fallito');
+
             const data = await resp.json();
             uploadedURL = data.secure_url || data.url;
+
             statusEl.textContent = '✅ Caricato. Pronto per inviare.';
             sendBtn.disabled = false;
             canSend = true;
+
             startBtn.disabled = false;
             startBtn.textContent = '🎙️ Riregistra';
+
         }catch(err){
             console.error(err);
             statusEl.textContent = '❌ Errore upload';
@@ -183,22 +207,24 @@ sendBtn.addEventListener('click', async () => {
         statusEl.textContent = '✅ Email inviata!';
         canSend = false;
 
-        // Reset locale post invio
+        // Reset post-invio
         audioBlob = null;
         uploadedURL = "";
         player.src = "";
         player.style.display = 'none';
         player.load();
+
         startBtn.disabled = false;
         stopBtn.disabled = true;
         sendBtn.disabled = true;
         startBtn.textContent = '🎙️ Registra';
+
         timerEl.textContent = '00:00';
         resetCanvas();
+
     }catch(err){
         console.error(err);
         statusEl.textContent = '❌ Errore invio';
         sendBtn.disabled = false;
     }
 });
-
