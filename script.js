@@ -3,12 +3,12 @@
 --------------------------------*/
 
 // EmailJS
-const EMAILJS_PUBLIC_KEY = "2QBLDK86elrLCuW7B";
-const EMAILJS_SERVICE_ID = "service_1iwt1ib";
-const EMAILJS_TEMPLATE_ID = "template_0p26a4c";
+const EMAILJS_PUBLIC_KEY = "Vl2m0qwZx6xhkIDLd";
+const EMAILJS_SERVICE_ID = "service_8znlc4f";
+const EMAILJS_TEMPLATE_ID = "template_g2i3e4q";
 
 // Cloudinary
-const CLOUDINARY_CLOUD_NAME = "dcipeh2fg";
+const CLOUDINARY_CLOUD_NAME = "deaiwa9tu";
 const CLOUDINARY_UPLOAD_PRESET = "18Michele";
 
 /* -------------------------------
@@ -22,7 +22,7 @@ emailjs.init(EMAILJS_PUBLIC_KEY);
 const startBtn = document.getElementById('start');
 const stopBtn  = document.getElementById('stop');
 const sendBtn  = document.getElementById('send');
-const player   = document.getElementById('player'); // <audio controls>
+const player   = document.getElementById('player');
 const statusEl = document.getElementById('status');
 const timerEl  = document.getElementById('timer');
 const canvas   = document.getElementById('wave');
@@ -171,17 +171,19 @@ function attachStopHandler(){
     mediaRecorder.onstop = async () => {
         if(rafId) cancelAnimationFrame(rafId);
 
-        // WAV compatibile Safari/iPhone
-        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        // -------------------
+        // CONVERSIONE A MP3 (rinominando)
+        // -------------------
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // WebM dal browser
         audioURL = URL.createObjectURL(audioBlob);
         player.src = audioURL;
         player.style.display = 'block';
         statusEl.textContent = '⏳ Upload su Cloudinary...';
 
         try{
-            // Upload a Cloudinary come "messaggio.mp3"
+            // Upload su Cloudinary con nome .mp3
             const formData = new FormData();
-            formData.append('file', audioBlob, 'messaggio.mp3'); 
+            formData.append('file', audioBlob, 'messaggio.mp3'); // nome con estensione .mp3
             formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
             const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,{
