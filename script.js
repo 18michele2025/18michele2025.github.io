@@ -3,12 +3,12 @@
 --------------------------------*/
 
 // EmailJS
-const EMAILJS_PUBLIC_KEY = "Vl2m0qwZx6xhkIDLd";
-const EMAILJS_SERVICE_ID = "service_8znlc4f";
-const EMAILJS_TEMPLATE_ID = "template_g2i3e4q";
+const EMAILJS_PUBLIC_KEY = "2QBLDK86elrLCuW7B";
+const EMAILJS_SERVICE_ID = "service_1iwt1ib";
+const EMAILJS_TEMPLATE_ID = "template_0p26a4c";
 
 // Cloudinary
-const CLOUDINARY_CLOUD_NAME = "deaiwa9tu";
+const CLOUDINARY_CLOUD_NAME = "dcipeh2fg";
 const CLOUDINARY_UPLOAD_PRESET = "18Michele";
 
 /* -------------------------------
@@ -22,7 +22,7 @@ emailjs.init(EMAILJS_PUBLIC_KEY);
 const startBtn = document.getElementById('start');
 const stopBtn  = document.getElementById('stop');
 const sendBtn  = document.getElementById('send');
-const player   = document.getElementById('player');
+const player   = document.getElementById('player'); // <audio controls>
 const statusEl = document.getElementById('status');
 const timerEl  = document.getElementById('timer');
 const canvas   = document.getElementById('wave');
@@ -136,98 +136,4 @@ startBtn.addEventListener('click', async () => {
         return;
     }
 
-    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    const source = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    source.connect(analyser);
-    drawWave();
-
-    mediaRecorder = new MediaRecorder(stream);
-    audioChunks = [];
-    mediaRecorder.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.push(e.data); };
-
-    mediaRecorder.onstart = () => {
-        statusEl.textContent = '🎙️ Registrazione in corso...';
-        startBtn.disabled = true;
-        stopBtn.disabled = false;
-        sendBtn.disabled = true;
-        player.style.display = 'none';
-        startTimer();
-    };
-    mediaRecorder.start();
-});
-
-stopBtn.addEventListener('click', () => {
-    if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
-    stopBtn.disabled = true;
-    stopTimer();
-    statusEl.textContent = '⏳ Elaborazione audio...';
-});
-
-// Gestione stop e upload Cloudinary
-function attachStopHandler(){
-    if(!mediaRecorder) return;
-    mediaRecorder.onstop = async () => {
-        if(rafId) cancelAnimationFrame(rafId);
-
-        // -------------------
-        // CONVERSIONE A MP3 (rinominando)
-        // -------------------
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // WebM dal browser
-        audioURL = URL.createObjectURL(audioBlob);
-        player.src = audioURL;
-        player.style.display = 'block';
-        statusEl.textContent = '⏳ Upload su Cloudinary...';
-
-        try{
-            // Upload su Cloudinary con nome .mp3
-            const formData = new FormData();
-            formData.append('file', audioBlob, 'messaggio.mp3'); // nome con estensione .mp3
-            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
-            const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,{
-                method:'POST', body:formData
-            });
-            if(!resp.ok) throw new Error('Upload fallito');
-            const data = await resp.json();
-            uploadedURL = data.secure_url || data.url;
-            statusEl.textContent = '✅ Caricato. Pronto per inviare.';
-            sendBtn.disabled = false;
-            startBtn.disabled = false;
-            startBtn.textContent = '🎙️ Riregistra';
-        }catch(err){
-            console.error(err);
-            statusEl.textContent = '❌ Errore upload';
-            sendBtn.disabled = true;
-            startBtn.disabled = false;
-        } finally{
-            if(stream) stream.getTracks().forEach(t=>t.stop());
-            if(audioCtx && typeof audioCtx.close==='function') audioCtx.close().catch(()=>{audioCtx=null});
-        }
-    };
-}
-setInterval(attachStopHandler,400);
-
-// Invia email con EmailJS
-sendBtn.addEventListener('click', ()=>{
-    if(!uploadedURL){ statusEl.textContent='Nessun file caricato.'; return; }
-    statusEl.textContent='📤 Invio email...';
-    sendBtn.disabled = true;
-
-    emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-        message:'Hai ricevuto un messaggio vocale!',
-        audio_link: uploadedURL
-    }).then(()=>{
-        statusEl.textContent='✅ Email inviata!';
-        sendBtn.disabled = false;
-    }).catch(err=>{
-        console.error(err);
-        statusEl.textContent='❌ Errore invio';
-        sendBtn.disabled = false;
-    });
-});
-
-// Pulizia pagina
-window.addEventListener('beforeunload', resetRecordingState);
-resetCanvas();
+    audioCtx = new (window
