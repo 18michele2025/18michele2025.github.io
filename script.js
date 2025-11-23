@@ -22,7 +22,7 @@ emailjs.init(EMAILJS_PUBLIC_KEY);
 const startBtn = document.getElementById('start');
 const stopBtn  = document.getElementById('stop');
 const sendBtn  = document.getElementById('send');
-const player   = document.getElementById('player');
+const player   = document.getElementById('player'); // <audio controls>
 const statusEl = document.getElementById('status');
 const timerEl  = document.getElementById('timer');
 const canvas   = document.getElementById('wave');
@@ -171,19 +171,17 @@ function attachStopHandler(){
     mediaRecorder.onstop = async () => {
         if(rafId) cancelAnimationFrame(rafId);
 
-        // -------------------
-        // CONVERSIONE A MP3 (rinominando)
-        // -------------------
-        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); // WebM dal browser
+        // WAV compatibile Safari/iPhone
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
         audioURL = URL.createObjectURL(audioBlob);
         player.src = audioURL;
         player.style.display = 'block';
         statusEl.textContent = '⏳ Upload su Cloudinary...';
 
         try{
-            // Upload su Cloudinary con nome .mp3
+            // Upload a Cloudinary come "messaggio.mp3"
             const formData = new FormData();
-            formData.append('file', audioBlob, 'messaggio.mp3'); // nome con estensione .mp3
+            formData.append('file', audioBlob, 'messaggio.mp3'); 
             formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
             const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,{
