@@ -28,11 +28,12 @@ const ctx      = canvas.getContext('2d');
 /* -------------------------------
         VARIABILI DI STATO
 --------------------------------*/
-let audioCtx, recorder, stream;
+let stream = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let audioBlob = null;
 let uploadedURL = "";
 let canSend = false;
-let rafId = null;
 let seconds = 0;
 let timerInterval = null;
 
@@ -68,7 +69,24 @@ function startTimer(){
 
 function stopTimer(){ clearInterval(timerInterval); }
 
-function drawWaveDummy(){ resetCanvas(); }
+function resetRecordingState(){
+    if(mediaRecorder && mediaRecorder.state !== 'inactive') mediaRecorder.stop();
+    if(stream) stream.getTracks().forEach(t => t.stop());
+    audioChunks = [];
+    audioBlob = null;
+    uploadedURL = "";
+    canSend = false;
+    player.src = "";
+    player.style.display = 'none';
+    startBtn.disabled = false;
+    stopBtn.disabled = true;
+    sendBtn.disabled = true;
+    startBtn.textContent = '🎙️ Registra';
+    timerEl.textContent = '00:00';
+    resetCanvas();
+}
+
+window.addEventListener('beforeunload', resetRecordingState);
 
 /* -------------------------------
         BUTTON EVENTS
@@ -77,61 +95,48 @@ startBtn.addEventListener('click', async () => {
     resetRecordingState();
 
     try{
-        // Chiedi permesso microfono
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    }catch(err){
+        console.error(err);
+        statusEl.textContent = '❌ Permesso microfono negato o errore: ' + err.message;
+        return;
+    }
 
-        // Crea AudioContext e sorgente
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        await audioCtx.resume(); // importante su iOS
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
 
-        const source = audioCtx.createMediaStreamSource(stream);
+    mediaRecorder.ondataavailable = e => {
+        if(e.data && e.data.size > 0) audioChunks.push(e.data);
+    };
 
-        // Inizializza Recorder.js
-        recorder = new Recorder(source, { numChannels: 1 });
-        recorder.record();
-
-        // UI
+    mediaRecorder.onstart = () => {
         statusEl.textContent = '🎙️ Registrazione in corso...';
         startBtn.disabled = true;
         stopBtn.disabled = false;
         sendBtn.disabled = true;
         player.style.display = 'none';
         startTimer();
+    };
 
-    }catch(err){
-        console.error(err);
-        statusEl.textContent = '❌ Permesso microfono negato o errore: ' + err.message;
-    }
-});
-
-stopBtn.addEventListener('click', () => {
-    if(!recorder) return;
-    recorder.stop();
-    stopBtn.disabled = true;
-    stopTimer();
-    statusEl.textContent = '⏳ Elaborazione audio...';
-
-    recorder.exportWAV(async (blob) => {
-        audioBlob = blob;
-        if(blob.size === 0){
-            statusEl.textContent = '❌ Registrazione vuota';
-            return;
-        }
-
-        const url = URL.createObjectURL(blob);
+    mediaRecorder.onstop = async () => {
+        stopTimer();
+        audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const url = URL.createObjectURL(audioBlob);
         player.src = url;
-        player.load(); // necessario su iPhone
+        player.load();
         player.style.display = 'block';
         statusEl.textContent = '⏳ Upload su Cloudinary...';
 
         try{
             const formData = new FormData();
-            formData.append('file', blob, 'messaggio.mp3');
+            formData.append('file', audioBlob, 'messaggio.webm');
             formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-            const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,{
-                method:'POST', body:formData
+            const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`, {
+                method: 'POST',
+                body: formData
             });
+
             if(!resp.ok) throw new Error('Upload fallito');
             const data = await resp.json();
             uploadedURL = data.secure_url || data.url;
@@ -146,66 +151,53 @@ stopBtn.addEventListener('click', () => {
             sendBtn.disabled = true;
             canSend = false;
         }finally{
-            stream.getTracks().forEach(t=>t.stop());
-            audioCtx.close().catch(()=>{audioCtx=null});
+            if(stream) stream.getTracks().forEach(t => t.stop());
         }
-    });
+    };
+
+    mediaRecorder.start();
 });
 
-// INVIO EMAIL
+stopBtn.addEventListener('click', () => {
+    if(mediaRecorder && mediaRecorder.state !== 'inactive'){
+        mediaRecorder.stop();
+        stopBtn.disabled = true;
+    }
+});
+
 sendBtn.addEventListener('click', async () => {
     if(!canSend){
         statusEl.textContent = '📌 Devi registrare prima di inviare';
         return;
     }
+
     statusEl.textContent = '📤 Invio email...';
     sendBtn.disabled = true;
 
     try{
         await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
-            message:'Hai ricevuto un messaggio vocale!',
+            message: 'Hai ricevuto un messaggio vocale!',
             audio_link: uploadedURL
         });
 
         statusEl.textContent = '✅ Email inviata!';
-        canSend = false; // blocco invio multiplo
+        canSend = false;
 
-        // reset locale dopo invio
+        // Reset locale post invio
         audioBlob = null;
         uploadedURL = "";
         player.src = "";
         player.style.display = 'none';
         player.load();
-        stopBtn.disabled = true;
         startBtn.disabled = false;
-        startBtn.textContent = '🎙️ Riregistra';
+        stopBtn.disabled = true;
+        sendBtn.disabled = true;
+        startBtn.textContent = '🎙️ Registra';
         timerEl.textContent = '00:00';
         resetCanvas();
-
     }catch(err){
         console.error(err);
         statusEl.textContent = '❌ Errore invio';
         sendBtn.disabled = false;
     }
 });
-
-// reset pagina
-function resetRecordingState(){
-    if(recorder){ recorder.stop(); recorder.clear(); recorder = null; }
-    if(audioCtx){ audioCtx.close().catch(()=>{}); audioCtx=null; }
-    if(stream) stream.getTracks().forEach(t=>t.stop());
-    audioBlob = null;
-    uploadedURL = "";
-    canSend = false;
-    player.src="";
-    player.style.display='none';
-    player.load();
-    startBtn.disabled = false;
-    stopBtn.disabled = true;
-    sendBtn.disabled = true;
-    startBtn.textContent = '🎙️ Registra';
-    timerEl.textContent='00:00';
-    resetCanvas();
-}
-window.addEventListener('beforeunload', resetRecordingState);
-
