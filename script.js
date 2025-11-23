@@ -136,4 +136,113 @@ startBtn.addEventListener('click', async () => {
         return;
     }
 
-    audioCtx = new (window
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const source = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+    drawWave();
+
+    mediaRecorder = new MediaRecorder(stream);
+    audioChunks = [];
+    mediaRecorder.ondataavailable = e => { if(e.data && e.data.size>0) audioChunks.push(e.data); };
+
+    mediaRecorder.onstart = () => {
+        statusEl.textContent = '🎙️ Registrazione in corso...';
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        sendBtn.disabled = true;
+        player.style.display = 'none';
+        startTimer();
+    };
+    mediaRecorder.start();
+});
+
+stopBtn.addEventListener('click', () => {
+    if(mediaRecorder && mediaRecorder.state!=='inactive') mediaRecorder.stop();
+    stopBtn.disabled = true;
+    stopTimer();
+    statusEl.textContent = '⏳ Elaborazione audio...';
+});
+
+// Gestione stop e upload Cloudinary
+function attachStopHandler(){
+    if(!mediaRecorder) return;
+    mediaRecorder.onstop = async () => {
+        if(rafId) cancelAnimationFrame(rafId);
+
+        const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+        audioURL = URL.createObjectURL(audioBlob);
+        player.src = audioURL;
+        player.style.display = 'block';
+        statusEl.textContent = '⏳ Upload su Cloudinary...';
+
+        try{
+            const formData = new FormData();
+            formData.append('file', audioBlob, 'messaggio.mp3'); 
+            formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+            const resp = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/raw/upload`,{
+                method:'POST', body:formData
+            });
+            if(!resp.ok) throw new Error('Upload fallito');
+            const data = await resp.json();
+            uploadedURL = data.secure_url || data.url;
+            statusEl.textContent = '✅ Caricato. Pronto per inviare.';
+            sendBtn.disabled = false;
+            startBtn.disabled = false;
+            startBtn.textContent = '🎙️ Riregistra';
+        }catch(err){
+            console.error(err);
+            statusEl.textContent = '❌ Errore upload';
+            sendBtn.disabled = true;
+            startBtn.disabled = false;
+        } finally{
+            if(stream) stream.getTracks().forEach(t=>t.stop());
+            if(audioCtx && typeof audioCtx.close==='function') audioCtx.close().catch(()=>{audioCtx=null});
+        }
+    };
+}
+setInterval(attachStopHandler,400);
+
+// Invia email con EmailJS e reset locale per prevenire spam
+sendBtn.addEventListener('click', async () => {
+    if (!uploadedURL) {
+        statusEl.textContent = 'Nessun file caricato.';
+        return;
+    }
+
+    statusEl.textContent = '📤 Invio email...';
+    sendBtn.disabled = true;
+
+    try {
+        await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+            message: 'Hai ricevuto un messaggio vocale!',
+            audio_link: uploadedURL
+        });
+
+        statusEl.textContent = '✅ Email inviata!';
+
+        // RESET LOCALE DOPO INVIO
+        audioChunks = [];
+        audioURL = '';
+        uploadedURL = '';
+        player.src = '';
+        player.style.display = 'none';
+        startBtn.disabled = false;
+        startBtn.textContent = '🎙️ Riregistra';
+        stopBtn.disabled = true;
+        sendBtn.disabled = true;
+        timerEl.textContent = '00:00';
+        resetCanvas();
+        
+    } catch (err) {
+        console.error(err);
+        statusEl.textContent = '❌ Errore invio';
+        sendBtn.disabled = false;
+    }
+});
+
+// Pulizia pagina
+window.addEventListener('beforeunload', resetRecordingState);
+resetCanvas();
