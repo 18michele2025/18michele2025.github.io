@@ -125,7 +125,7 @@ startBtn.addEventListener('click', async () => {
         player.src = url;
         player.load();
         player.style.display = 'block';
-        statusEl.textContent = '⏳ Upload su Cloudinary...';
+        statusEl.textContent = '⏳ Upload sul Cloud...';
 
         try{
             const formData = new FormData();
@@ -201,3 +201,4 @@ sendBtn.addEventListener('click', async () => {
         sendBtn.disabled = false;
     }
 });
+
